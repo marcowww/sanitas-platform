@@ -1,4 +1,3 @@
-.github/
 gradlew
 gradlew.bat
 gradle/
@@ -13,3 +12,60 @@ build/
 *.iws
 target/
 .vscode/settings.json
+
+# Java & Gradle
+build/
+**/build/
+**/out/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# PID files
+pids/
+*.pid
+
+# Test & coverage
+**/test-results/
+**/reports/
+**/coverage/
+
+# JARs & binaries
+*.jar
+*.war
+*.ear
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Notebooks
+*.ipynb_checkpoints/
+
+# Misc
+nohup.out
+.env
+.env.*
+*.local
+
+# Docker
+*.env
+*.envrc
+docker-compose.override.yml
