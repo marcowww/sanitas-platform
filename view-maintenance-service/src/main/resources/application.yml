@@ -1,0 +1,48 @@
+server:
+  port: 8003
+
+spring:
+  application:
+    name: view-maintenance-service
+  
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: view-maintenance-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.type.mapping: |
+          BookingCreated:com.healthcare.staffing.shared.events.booking.BookingCreated,
+          BookingModified:com.healthcare.staffing.shared.events.booking.BookingModified,
+          BookingCancelled:com.healthcare.staffing.shared.events.booking.BookingCancelled,
+          BookingBooked:com.healthcare.staffing.shared.events.booking.BookingBooked,
+          BookingPullout:com.healthcare.staffing.shared.events.booking.BookingPullout,
+          NewCarer:com.healthcare.staffing.shared.events.carer.NewCarer,
+          CarerUpdated:com.healthcare.staffing.shared.events.carer.CarerUpdated,
+          CarerAvailabilityChanged:com.healthcare.staffing.shared.events.carer.CarerAvailabilityChanged
+        spring.json.trusted.packages: "com.healthcare.staffing.shared.events"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.healthcare.staffing: DEBUG
+    org.springframework.kafka: INFO

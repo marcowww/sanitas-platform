@@ -1,0 +1,48 @@
+server:
+  port: 8001
+
+spring:
+  application:
+    name: booking-service
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/booking_db
+    username: booking_user
+    password: booking_pass
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.type.mapping: |
+          BookingCreated:com.healthcare.staffing.shared.events.booking.BookingCreated,
+          BookingModified:com.healthcare.staffing.shared.events.booking.BookingModified,
+          BookingCancelled:com.healthcare.staffing.shared.events.booking.BookingCancelled,
+          BookingBooked:com.healthcare.staffing.shared.events.booking.BookingBooked,
+          BookingPullout:com.healthcare.staffing.shared.events.booking.BookingPullout
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.healthcare.staffing: DEBUG
+    org.springframework.kafka: INFO

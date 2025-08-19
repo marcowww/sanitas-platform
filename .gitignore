@@ -1,0 +1,15 @@
+.github/
+gradlew
+gradlew.bat
+gradle/
+build/
+*/build/
+.gradle/
+*.log
+.DS_Store
+.idea/
+*.iml
+*.ipr
+*.iws
+target/
+.vscode/settings.json
