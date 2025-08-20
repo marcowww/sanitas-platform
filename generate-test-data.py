@@ -50,7 +50,7 @@ QUALIFICATIONS = [
     "Infection Control", "Manual Handling", "Safeguarding", "NVQ Level 2", "NVQ Level 3"
 ]
 
-VISA_STATUSES = ["CITIZEN", "PERMANENT_RESIDENT", "WORK_VISA", "STUDENT_VISA"]
+VISA_STATUSES = ["BRITISH_CITIZEN", "PERMANENT_RESIDENT", "WORK_VISA", "STUDENT_VISA"]
 
 FACILITY_NAMES = [
     "General Hospital", "Medical Centre", "Care Home", "Community Hospital", "Specialist Clinic",
@@ -220,50 +220,6 @@ def create_booking() -> str:
         print_colored(f"Error creating booking: {e}", "red")
         return ""
 
-def generate_carer_availability(carer_id: str):
-    """Generate random availability for a carer"""
-    if not carer_id:
-        return
-    
-    # Generate availability for next 14 days
-    availability_slots = []
-    for day_offset in range(14):
-        future_date = datetime.now() + timedelta(days=day_offset)
-        date_str = future_date.strftime("%Y-%m-%d")
-        
-        # 80% chance of being available on any given day
-        if random.randint(1, 10) <= 8:
-            # Generate random time slots
-            start_hour = random.choice([6, 7, 8, 9])  # Early shifts
-            end_hour = random.choice([14, 16, 18, 20, 22])  # Various shift ends
-            
-            availability_slots.append({
-                "date": date_str,
-                "startTime": f"{start_hour:02d}:00",
-                "endTime": f"{end_hour:02d}:00",
-                "available": True
-            })
-        else:
-            # Mark as unavailable
-            availability_slots.append({
-                "date": date_str,
-                "startTime": "00:00",
-                "endTime": "23:59",
-                "available": False
-            })
-    
-    # Update availability
-    try:
-        response = requests.post(
-            f"{CARER_SERVICE_URL}/api/carers/{carer_id}/availability",
-            json={"availabilitySlots": availability_slots},
-            headers={"Content-Type": "application/json"},
-            timeout=10
-        )
-        return response.status_code in [200, 201, 204]
-    except requests.exceptions.RequestException:
-        return False
-
 def get_all_carers() -> List[str]:
     """Get all carer IDs from the carer service"""
     try:
@@ -287,49 +243,8 @@ def get_all_bookings() -> List[str]:
         return []
 
 def assign_random_bookings():
-    """Randomly assign some bookings to carers"""
-    print_colored("\n📋 Step 3: Randomly assigning some bookings to carers...", "blue")
-    
-    # Wait a bit for read projections to be updated
-    time.sleep(3)
-    
-    carer_ids = get_all_carers()
-    booking_ids = get_all_bookings()
-    
-    if not carer_ids or not booking_ids:
-        print_colored("⚠ No carers or bookings found for assignment", "yellow")
-        return
-    
-    # Assign 20% of bookings randomly
-    assignments_to_make = len(booking_ids) // 5
-    assignments_made = 0
-    
-    for booking_id in booking_ids:
-        if assignments_made >= assignments_to_make:
-            break
-            
-        # 20% chance to assign this booking
-        if random.randint(1, 5) == 1:
-            carer_id = random.choice(carer_ids)
-            
-            try:
-                response = requests.post(
-                    f"{BOOKING_SERVICE_URL}/api/bookings/{booking_id}/book",
-                    json={"carerId": carer_id, "bookedBy": "test-script@hospital.com"},
-                    headers={"Content-Type": "application/json"},
-                    timeout=10
-                )
-                
-                if response.status_code in [200, 201, 204]:
-                    assignments_made += 1
-                    
-                    if assignments_made % 10 == 0:
-                        print_colored(f"  ✓ Assigned {assignments_made} bookings", "green")
-                
-            except requests.exceptions.RequestException:
-                continue
-    
-    print_colored(f"✓ Assigned {assignments_made} bookings to carers", "green")
+    # Booking assignment removed: this function intentionally left blank
+    return
 
 def main():
     """Main execution function"""
@@ -367,21 +282,6 @@ def main():
     
     print_colored(f"✓ Created {created_carers} carers", "green")
     
-    # Step 1.5: Generate availability for carers
-    print_colored(f"\n📅 Step 1.5: Generating availability for carers...", "blue")
-    availability_generated = 0
-    
-    for i, carer_id in enumerate(carer_ids, 1):
-        if generate_carer_availability(carer_id):
-            availability_generated += 1
-        
-        if i % 10 == 0:
-            print_colored(f"  ✓ Generated availability for {i} carers", "green")
-        
-        time.sleep(0.05)
-    
-    print_colored(f"✓ Generated availability for {availability_generated} carers", "green")
-    
     # Step 2: Create bookings
     print_colored(f"\n🏥 Step 2: Creating {NUM_BOOKINGS} bookings...", "blue")
     created_bookings = 0
@@ -402,15 +302,11 @@ def main():
     print_colored("\n⏳ Waiting for events to be processed...", "blue")
     time.sleep(5)
     
-    # Step 3: Assign some bookings
-    assign_random_bookings()
-    
     # Summary
     print_colored("\n🎉 Test data generation completed!", "green")
     print_colored("\n📊 Summary:", "blue")
     print(f"  👥 Carers created: {created_carers}")
-    print(f"  � Availability generated: {availability_generated}")
-    print(f"  �📋 Bookings created: {created_bookings}")
+    print(f"   Bookings created: {created_bookings}")
     
     print_colored("\n🧪 You can now test the system with:", "blue")
     print(f"  curl {READ_API_URL}/api/read/carers")

@@ -28,8 +28,7 @@ spring:
       properties:
         spring.json.type.mapping: |
           NewCarer:com.healthcare.staffing.shared.events.carer.NewCarer,
-          CarerUpdated:com.healthcare.staffing.shared.events.carer.CarerUpdated,
-          CarerAvailabilityChanged:com.healthcare.staffing.shared.events.carer.CarerAvailabilityChanged
+          CarerUpdated:com.healthcare.staffing.shared.events.carer.CarerUpdated
 
 management:
   endpoints:

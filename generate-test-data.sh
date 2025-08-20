@@ -199,50 +199,7 @@ create_booking() {
 }
 
 # Function to randomly assign some bookings to carers
-assign_random_bookings() {
-    echo -e "\n${BLUE}Step 3: Randomly assigning some bookings to carers...${NC}"
-    
-    # Get list of carers
-    local carers=$(curl -s "$READ_API_URL/api/read/carers" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
-    local carer_array=($carers)
-    
-    # Get list of bookings
-    local bookings=$(curl -s "$READ_API_URL/api/read/bookings" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
-    local booking_array=($bookings)
-    
-    if [ ${#carer_array[@]} -eq 0 ] || [ ${#booking_array[@]} -eq 0 ]; then
-        echo -e "${YELLOW}⚠ No carers or bookings found for assignment${NC}"
-        return
-    fi
-    
-    # Assign 20% of bookings randomly
-    local assignments_to_make=$((${#booking_array[@]} / 5))
-    local assignments_made=0
-    
-    for booking_id in "${booking_array[@]}"; do
-        if [ $assignments_made -ge $assignments_to_make ]; then
-            break
-        fi
-        
-        # 20% chance to assign this booking
-        if [ $((RANDOM % 5)) -eq 0 ]; then
-            local random_carer_idx=$((RANDOM % ${#carer_array[@]}))
-            local carer_id="${carer_array[$random_carer_idx]}"
-            
-            curl -s -X POST "$BOOKING_SERVICE_URL/api/bookings/$booking_id/book" \
-                -H "Content-Type: application/json" \
-                -d "{\"carerId\": \"$carer_id\", \"bookedBy\": \"test-script@example.com\"}" > /dev/null
-            
-            assignments_made=$((assignments_made + 1))
-            
-            if [ $((assignments_made % 10)) -eq 0 ]; then
-                echo -e "${GREEN}  ✓ Assigned $assignments_made bookings${NC}"
-            fi
-        fi
-    done
-    
-    echo -e "${GREEN}✓ Assigned $assignments_made bookings to carers${NC}"
-}
+# Booking assignment logic removed.
 
 # Main execution
 main() {
@@ -304,8 +261,6 @@ main() {
     # Wait a bit for events to be processed
     echo -e "\n${BLUE}Waiting for events to be processed...${NC}"
     sleep 5
-    
-    assign_random_bookings
     
     echo -e "\n${GREEN}🎉 Test data generation completed!${NC}"
     echo -e "\n${BLUE}Summary:${NC}"

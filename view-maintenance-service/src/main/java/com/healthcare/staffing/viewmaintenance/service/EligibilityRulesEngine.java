@@ -37,11 +37,6 @@ public class EligibilityRulesEngine {
             return false;
         }
         
-        // Rule 5: Availability check (simplified - would need more complex logic in real system)
-        if (!isCarerAvailable(carer.getCarerId(), booking.getStartTime(), booking.getEndTime())) {
-            return false;
-        }
-        
         return true;
     }
     
@@ -71,7 +66,7 @@ public class EligibilityRulesEngine {
         // Simplified visa validation logic
         // In production, this would check facility-specific visa requirements
         
-        if ("CITIZEN".equals(visaStatus) || "PERMANENT_RESIDENT".equals(visaStatus)) {
+        if ("BRITISH_CITIZEN".equals(visaStatus) || "CITIZEN".equals(visaStatus) || "PERMANENT_RESIDENT".equals(visaStatus)) {
             return true; // Always valid
         }
         
@@ -89,38 +84,6 @@ public class EligibilityRulesEngine {
     private boolean isRestrictedFacility(UUID facilityId) {
         // Mock implementation - in production, this would be a configurable rule
         return facilityId.toString().hashCode() % 10 == 0; // 10% of facilities are restricted
-    }
-    
-    /**
-     * Checks if carer is available during the specified time period
-     * 
-     * CQRS Note: This is used during event processing for initial eligibility determination.
-     * It should NOT query read projections as that would violate CQRS principles.
-     * Real-time availability checking should happen in the read-api-service.
-     */
-    private boolean isCarerAvailable(UUID carerId, java.time.LocalDateTime startTime, 
-                                   java.time.LocalDateTime endTime) {
-        
-        // For CQRS compliance, this method should only check:
-        // 1. Carer's declared availability schedule (from CarerAvailabilityChanged events)
-        // 2. Basic business rules (e.g., no shifts longer than 12 hours)
-        // 3. Time-based constraints (e.g., no night shifts for certain grades)
-        
-        // It should NOT check for booking conflicts - those are resolved by:
-        // - BookingEventHandler during event processing (eventual consistency)
-        // - Read-API service for real-time queries
-        // - Booking service for write-side validation
-        
-        // For now, basic availability checking:
-        java.time.Duration shiftDuration = java.time.Duration.between(startTime, endTime);
-        if (shiftDuration.toHours() > 12) {
-            return false; // No shifts longer than 12 hours
-        }
-        
-        // Additional carer-specific availability rules could be added here
-        // based on carer preferences/constraints stored in the carer aggregate
-        
-        return true; // Basic eligibility passed
     }
     
     // Supporting classes for projections

@@ -41,31 +41,69 @@ stop_service() {
     fi
 }
 
-# Stop application services
-echo -e "\n${BLUE}Stopping application services...${NC}"
-stop_service "read-api-service"
-stop_service "view-maintenance-service"
-stop_service "carer-service"
-stop_service "booking-service"
-
-# Clean up any remaining Java processes for this project
-echo -e "\n${BLUE}Cleaning up any remaining processes...${NC}"
-pkill -f "healthcare-staffing" 2>/dev/null || true
-
-# Stop infrastructure
-echo -e "\n${BLUE}Stopping infrastructure services...${NC}"
-docker-compose down
-
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Infrastructure services stopped${NC}"
+# Parse input argument: no arg or 'all' => stop everything; otherwise stop named service
+TARGET="$1"
+if [ -z "$TARGET" ] || [ "$TARGET" = "all" ]; then
+    MODE="all"
 else
-    echo -e "${RED}✗ Failed to stop some infrastructure services${NC}"
+    MODE="single"
+    SERVICE="$TARGET"
 fi
 
-# Clean up directories
-if [ -d "pids" ]; then
-    rm -rf pids
-fi
+# Ordered list of services to stop (preferred order)
+SERVICES=(
+  "read-api-service"
+  "view-maintenance-service"
+  "carer-service"
+  "booking-service"
+  "booking-orchestration-service"
+)
 
-echo -e "\n${GREEN}🏁 All services stopped successfully${NC}"
-echo -e "${YELLOW}📋 Logs are preserved in the logs/ directory${NC}"
+if [ "$MODE" = "all" ]; then
+    echo -e "\n${BLUE}Stopping application services...${NC}"
+    for s in "${SERVICES[@]}"; do
+        stop_service "$s"
+    done
+
+    # Clean up any remaining Java processes for this project
+    echo -e "\n${BLUE}Cleaning up any remaining processes...${NC}"
+    pkill -f "healthcare-staffing" 2>/dev/null || true
+
+    # Stop infrastructure
+    echo -e "\n${BLUE}Stopping infrastructure services...${NC}"
+    docker-compose down
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ Infrastructure services stopped${NC}"
+    else
+        echo -e "${RED}✗ Failed to stop some infrastructure services${NC}"
+    fi
+
+    # Clean up pid directory
+    if [ -d "pids" ]; then
+        rm -rf pids
+    fi
+
+    echo -e "\n${GREEN}🏁 All services stopped successfully${NC}"
+    echo -e "${YELLOW}📋 Logs are preserved in the logs/ directory${NC}"
+else
+    echo -e "\n${BLUE}Stopping single service: $SERVICE${NC}"
+    # Validate service name
+    found=false
+    for s in "${SERVICES[@]}"; do
+        if [ "$s" = "$SERVICE" ]; then
+            found=true
+            break
+        fi
+    done
+
+    if [ "$found" = false ]; then
+        echo -e "${RED}✗ Unknown service: $SERVICE${NC}"
+        echo -e "${YELLOW}Valid services: ${SERVICES[*]}${NC}"
+        exit 1
+    fi
+
+    stop_service "$SERVICE"
+    echo -e "\n${GREEN}✅ $SERVICE stopped${NC}"
+    echo -e "${YELLOW}📋 Logs are preserved in the logs/ directory${NC}"
+fi

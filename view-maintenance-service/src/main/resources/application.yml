@@ -29,8 +29,7 @@ spring:
           BookingBooked:com.healthcare.staffing.shared.events.booking.BookingBooked,
           BookingPullout:com.healthcare.staffing.shared.events.booking.BookingPullout,
           NewCarer:com.healthcare.staffing.shared.events.carer.NewCarer,
-          CarerUpdated:com.healthcare.staffing.shared.events.carer.CarerUpdated,
-          CarerAvailabilityChanged:com.healthcare.staffing.shared.events.carer.CarerAvailabilityChanged
+          CarerUpdated:com.healthcare.staffing.shared.events.carer.CarerUpdated
         spring.json.trusted.packages: "com.healthcare.staffing.shared.events"
 
 management:

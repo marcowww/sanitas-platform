@@ -41,8 +41,6 @@ public class CarerEventHandler {
             handleNewCarer((NewCarer) event);
         } else if (event instanceof CarerUpdated) {
             handleCarerUpdated((CarerUpdated) event);
-        } else if (event instanceof CarerAvailabilityChanged) {
-            handleCarerAvailabilityChanged((CarerAvailabilityChanged) event);
         } else {
             log.warn("Unhandled carer event type: {}", event.getClass().getSimpleName());
         }
@@ -97,23 +95,6 @@ public class CarerEventHandler {
             log.info("Updated carer data and eligibility projections for carerId: {}", event.getCarerId());
         } else {
             log.info("No significant changes for carerId: {}", event.getCarerId());
-        }
-    }
-
-    private void handleCarerAvailabilityChanged(CarerAvailabilityChanged event) {
-        log.info("Processing CarerAvailabilityChanged event for carerId: {}", event.getCarerId());
-        
-        // Availability changes affect which shifts a carer can take
-        // For now, we'll trigger a recalculation of eligible shifts
-        EligibilityRulesEngine.CarerProjection carerProjection = 
-            viewProjectionService.getCarerData(event.getCarerId());
-        
-        if (carerProjection != null) {
-            // Recalculate eligible shifts based on new availability
-            updateEligibilityProjectionsForModifiedCarer(event.getCarerId(), carerProjection);
-            log.info("Updated eligibility projections for carer availability change: {}", event.getCarerId());
-        } else {
-            log.warn("Carer not found for availability change event: {}", event.getCarerId());
         }
     }
 

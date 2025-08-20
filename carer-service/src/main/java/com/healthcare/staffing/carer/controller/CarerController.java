@@ -1,17 +1,14 @@
 package com.healthcare.staffing.carer.controller;
 
 import com.healthcare.staffing.carer.domain.Carer;
-import com.healthcare.staffing.carer.domain.CarerAvailability;
 import com.healthcare.staffing.carer.domain.CarerAvailabilityBlock;
 import com.healthcare.staffing.carer.service.CarerService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -52,13 +49,6 @@ public class CarerController {
         return ResponseEntity.ok(carer);
     }
 
-    @PostMapping("/{carerId}/availability")
-    public ResponseEntity<Void> updateAvailability(@PathVariable UUID carerId,
-                                                  @Valid @RequestBody UpdateAvailabilityRequest request) {
-        carerService.updateAvailability(carerId, request.getAvailabilitySlots());
-        return ResponseEntity.noContent().build();
-    }
-
     @GetMapping("/{carerId}")
     public ResponseEntity<Carer> getCarer(@PathVariable UUID carerId) {
         Carer carer = carerService.getCarer(carerId);
@@ -69,22 +59,6 @@ public class CarerController {
     public ResponseEntity<List<Carer>> getAllCarers() {
         List<Carer> carers = carerService.getAllCarers();
         return ResponseEntity.ok(carers);
-    }
-
-    @GetMapping("/{carerId}/availability")
-    public ResponseEntity<List<CarerAvailability>> getCarerAvailability(
-            @PathVariable UUID carerId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
-        
-        List<CarerAvailability> availability;
-        if (fromDate != null && toDate != null) {
-            availability = carerService.getCarerAvailability(carerId, fromDate, toDate);
-        } else {
-            availability = carerService.getCarerAvailability(carerId);
-        }
-        
-        return ResponseEntity.ok(availability);
     }
 
     @PutMapping("/{carerId}/availability/block")
@@ -158,15 +132,6 @@ public class CarerController {
 
         public String getUpdateReason() { return updateReason; }
         public void setUpdateReason(String updateReason) { this.updateReason = updateReason; }
-    }
-
-    public static class UpdateAvailabilityRequest {
-        private List<CarerService.AvailabilitySlotDto> availabilitySlots;
-
-        public List<CarerService.AvailabilitySlotDto> getAvailabilitySlots() { return availabilitySlots; }
-        public void setAvailabilitySlots(List<CarerService.AvailabilitySlotDto> availabilitySlots) { 
-            this.availabilitySlots = availabilitySlots; 
-        }
     }
 
     public static class BlockAvailabilityRequest {

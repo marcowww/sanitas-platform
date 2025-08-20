@@ -1,9 +1,7 @@
 package com.healthcare.staffing.carer.service;
 
 import com.healthcare.staffing.carer.domain.Carer;
-import com.healthcare.staffing.carer.domain.CarerAvailability;
 import com.healthcare.staffing.carer.domain.CarerAvailabilityBlock;
-import com.healthcare.staffing.carer.repository.CarerAvailabilityRepository;
 import com.healthcare.staffing.carer.repository.CarerAvailabilityBlockRepository;
 import com.healthcare.staffing.carer.repository.CarerRepository;
 import com.healthcare.staffing.shared.events.carer.*;
@@ -12,22 +10,18 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class CarerService {
     
     private final CarerRepository carerRepository;
-    private final CarerAvailabilityRepository availabilityRepository;
     private final CarerAvailabilityBlockRepository availabilityBlockRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     
@@ -35,11 +29,9 @@ public class CarerService {
 
     @Autowired
     public CarerService(CarerRepository carerRepository, 
-                       CarerAvailabilityRepository availabilityRepository,
                        CarerAvailabilityBlockRepository availabilityBlockRepository,
                        KafkaTemplate<String, Object> kafkaTemplate) {
         this.carerRepository = carerRepository;
-        this.availabilityRepository = availabilityRepository;
         this.availabilityBlockRepository = availabilityBlockRepository;
         this.kafkaTemplate = kafkaTemplate;
     }
@@ -157,31 +149,6 @@ public class CarerService {
         return carer;
     }
 
-    public void updateAvailability(UUID carerId, List<AvailabilitySlotDto> availabilitySlots) {
-        // Verify carer exists
-        carerRepository.findById(carerId)
-            .orElseThrow(() -> new RuntimeException("Carer not found: " + carerId));
-        
-        // Convert DTOs to domain objects
-        List<CarerAvailability> availabilities = availabilitySlots.stream()
-            .map(slot -> new CarerAvailability(carerId, slot.getDate(), 
-                slot.getStartTime(), slot.getEndTime(), slot.isAvailable()))
-            .collect(Collectors.toList());
-        
-        // Save availability updates
-        availabilityRepository.saveAll(availabilities);
-        
-        // Convert to event objects
-        List<CarerAvailabilityChanged.AvailabilitySlot> eventSlots = availabilitySlots.stream()
-            .map(slot -> new CarerAvailabilityChanged.AvailabilitySlot(
-                slot.getDate(), slot.getStartTime(), slot.getEndTime(), slot.isAvailable()))
-            .collect(Collectors.toList());
-        
-        // Emit CarerAvailabilityChanged event
-        CarerAvailabilityChanged event = new CarerAvailabilityChanged(carerId, eventSlots);
-        kafkaTemplate.send(CARER_EVENTS_TOPIC, event.getCarerId().toString(), event);
-    }
-
     public Carer getCarer(UUID carerId) {
         return carerRepository.findById(carerId)
             .orElseThrow(() -> new RuntimeException("Carer not found: " + carerId));
@@ -189,43 +156,6 @@ public class CarerService {
 
     public List<Carer> getAllCarers() {
         return carerRepository.findAll();
-    }
-
-    public List<CarerAvailability> getCarerAvailability(UUID carerId) {
-        return availabilityRepository.findByCarerId(carerId);
-    }
-
-    public List<CarerAvailability> getCarerAvailability(UUID carerId, LocalDate fromDate, LocalDate toDate) {
-        return availabilityRepository.findByCarerIdAndDateRange(carerId, fromDate, toDate);
-    }
-
-    // DTO for availability updates
-    public static class AvailabilitySlotDto {
-        private LocalDate date;
-        private LocalTime startTime;
-        private LocalTime endTime;
-        private boolean available;
-
-        public AvailabilitySlotDto() {}
-
-        public AvailabilitySlotDto(LocalDate date, LocalTime startTime, LocalTime endTime, boolean available) {
-            this.date = date;
-            this.startTime = startTime;
-            this.endTime = endTime;
-            this.available = available;
-        }
-
-        public LocalDate getDate() { return date; }
-        public void setDate(LocalDate date) { this.date = date; }
-
-        public LocalTime getStartTime() { return startTime; }
-        public void setStartTime(LocalTime startTime) { this.startTime = startTime; }
-
-        public LocalTime getEndTime() { return endTime; }
-        public void setEndTime(LocalTime endTime) { this.endTime = endTime; }
-
-        public boolean isAvailable() { return available; }
-        public void setAvailable(boolean available) { this.available = available; }
     }
 
     // Availability blocking methods for orchestration

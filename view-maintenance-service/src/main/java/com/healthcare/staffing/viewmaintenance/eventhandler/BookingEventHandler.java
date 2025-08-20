@@ -104,26 +104,67 @@ public class BookingEventHandler {
     }
 
     private void handleBookingBooked(BookingBooked event) {
+        log.info("=== PROCESSING BOOKING BOOKED EVENT ===");
+        log.info("Event received - BookingId: {}, CarerId: {}, Timestamp: {}", 
+                event.getBookingId(), event.getCarerId(), java.time.LocalDateTime.now());
+        
         // Get the booking details to check time overlap
         EligibilityRulesEngine.BookingProjection bookedBooking = 
             viewProjectionService.getBookingData(event.getBookingId());
         
         if (bookedBooking == null) {
-            log.warn("Booking data not found for booked booking: {}", event.getBookingId());
+            log.warn("Booking data not found for booked booking: {} - Event processing aborted", 
+                    event.getBookingId());
             return;
         }
         
+        log.info("Booking details - Shift: '{}', Grade: '{}', Location: '{}', Time: {} to {}", 
+                bookedBooking.getShift(), bookedBooking.getGrade(), bookedBooking.getLocation(),
+                bookedBooking.getStartTime(), bookedBooking.getEndTime());
+        
+        // Count eligible carers before processing
+        List<EligibleCarerDto> originalEligibleCarers = 
+            viewProjectionService.getEligibleCarersForShift(event.getBookingId());
+        int originalEligibleCount = originalEligibleCarers.size();
+        
+        // Count carer's available shifts before processing
+        List<EligibleShiftDto> carerOriginalShifts = 
+            viewProjectionService.getAvailableShiftsForCarer(event.getCarerId());
+        int carerOriginalShiftCount = carerOriginalShifts.size();
+        
+        log.info("Before processing - Eligible carers for this booking: {}, Available shifts for assigned carer: {}", 
+                originalEligibleCount, carerOriginalShiftCount);
+        
         // 1. Remove this booking from all carer availability lists except the assigned carer
+        log.info("Step 1: Removing booking from other carers' availability lists...");
         removeBookingFromCarerProjectionsExcept(event.getBookingId(), event.getCarerId());
         
         // 2. Update the booking status to show it's no longer available
+        log.info("Step 2: Updating booking status to 'BOOKED'...");
         updateBookingStatusInProjections(event.getBookingId(), "BOOKED");
         
         // 3. CRITICAL: Remove the assigned carer from all OTHER bookings that overlap in time
-        removeCarerFromConflictingBookings(event.getCarerId(), bookedBooking);
+        log.info("Step 3: Resolving time conflicts for assigned carer...");
+        int conflictingBookingsRemoved = removeCarerFromConflictingBookings(event.getCarerId(), bookedBooking);
         
-        log.info("Processed booking assignment and resolved time conflicts for carer: {} in booking: {}", 
-                event.getCarerId(), event.getBookingId());
+        // Post-processing metrics
+        List<EligibleCarerDto> remainingEligibleCarers = 
+            viewProjectionService.getEligibleCarersForShift(event.getBookingId());
+        List<EligibleShiftDto> carerRemainingShifts = 
+            viewProjectionService.getAvailableShiftsForCarer(event.getCarerId());
+        
+        int carersRemoved = originalEligibleCount - remainingEligibleCarers.size();
+        int shiftsRemovedFromCarer = carerOriginalShiftCount - carerRemainingShifts.size();
+        
+        log.info("=== BOOKING ASSIGNMENT COMPLETED ===");
+        log.info("Summary - BookingId: {}, CarerId: {}", event.getBookingId(), event.getCarerId());
+        log.info("  • Carers removed from this shift: {} (from {} to {})", 
+                carersRemoved, originalEligibleCount, remainingEligibleCarers.size());
+        log.info("  • Conflicting bookings removed from carer: {}", conflictingBookingsRemoved);
+        log.info("  • Carer's remaining available shifts: {} (was {})", 
+                carerRemainingShifts.size(), carerOriginalShiftCount);
+        log.info("  • Shifts removed from carer due to conflicts: {}", shiftsRemovedFromCarer);
+        log.info("==========================================");
     }
 
     private void handleBookingPullout(BookingPullout event) {
@@ -230,10 +271,14 @@ public class BookingEventHandler {
     }
 
     private void removeBookingFromCarerProjectionsExcept(UUID bookingId, UUID exceptCarerId) {
-        Set<String> carerIds = viewProjectionService.getAllCarerIds();
+        // Optimized approach: Get only the carers who were eligible for this shift
+        // instead of iterating through ALL carers in the system
+        List<EligibleCarerDto> eligibleCarers = viewProjectionService.getEligibleCarersForShift(bookingId);
         
-        for (String carerIdStr : carerIds) {
-            UUID carerId = UUID.fromString(carerIdStr);
+        for (EligibleCarerDto eligibleCarer : eligibleCarers) {
+            UUID carerId = eligibleCarer.getCarerId();
+            
+            // Skip the carer who got the booking
             if (!carerId.equals(exceptCarerId)) {
                 List<EligibleShiftDto> availableShifts = 
                     viewProjectionService.getAvailableShiftsForCarer(carerId);
@@ -242,14 +287,18 @@ public class BookingEventHandler {
                 viewProjectionService.updateAvailableShiftsForCarer(carerId, availableShifts);
             }
         }
+        
+        log.debug("Removed booking {} from {} eligible carers (excluding assigned carer {})", 
+                 bookingId, eligibleCarers.size() - 1, exceptCarerId);
     }
 
     private void updateBookingStatusInProjections(UUID bookingId, String status) {
-        // Update status in all carer availability lists
-        Set<String> carerIds = viewProjectionService.getAllCarerIds();
+        // Optimized approach: Get only the carers who were eligible for this booking
+        // instead of iterating through ALL carers in the system
+        List<EligibleCarerDto> eligibleCarers = viewProjectionService.getEligibleCarersForShift(bookingId);
         
-        for (String carerIdStr : carerIds) {
-            UUID carerId = UUID.fromString(carerIdStr);
+        for (EligibleCarerDto eligibleCarer : eligibleCarers) {
+            UUID carerId = eligibleCarer.getCarerId();
             List<EligibleShiftDto> availableShifts = 
                 viewProjectionService.getAvailableShiftsForCarer(carerId);
             
@@ -261,6 +310,9 @@ public class BookingEventHandler {
             
             viewProjectionService.updateAvailableShiftsForCarer(carerId, availableShifts);
         }
+        
+        log.debug("Updated booking {} status to '{}' for {} eligible carers", 
+                 bookingId, status, eligibleCarers.size());
     }
 
     private void addBookingToCarerAvailableShifts(UUID carerId, 
@@ -281,12 +333,16 @@ public class BookingEventHandler {
     /**
      * Removes a carer from all bookings that have time conflicts with the newly assigned booking
      */
-    private void removeCarerFromConflictingBookings(UUID carerId, EligibilityRulesEngine.BookingProjection bookedBooking) {
-        // Get all booking IDs
-        Set<String> allBookingIds = viewProjectionService.getAllBookingIds();
+    private int removeCarerFromConflictingBookings(UUID carerId, EligibilityRulesEngine.BookingProjection bookedBooking) {
+        // Optimized approach: Get only the shifts this carer was eligible for
+        // instead of checking ALL bookings in the system
+        List<EligibleShiftDto> carerAvailableShifts = 
+            viewProjectionService.getAvailableShiftsForCarer(carerId);
         
-        for (String bookingIdStr : allBookingIds) {
-            UUID bookingId = UUID.fromString(bookingIdStr);
+        int conflictsResolved = 0;
+        
+        for (EligibleShiftDto availableShift : carerAvailableShifts) {
+            UUID bookingId = availableShift.getBookingId();
             
             // Skip the booking that was just assigned
             if (bookingId.equals(bookedBooking.getBookingId())) {
@@ -304,10 +360,16 @@ public class BookingEventHandler {
                 // Remove the conflicting booking from this carer's available shifts
                 removeBookingFromCarerAvailableShifts(carerId, bookingId);
                 
+                conflictsResolved++;
                 log.info("Removed carer {} from conflicting booking {} due to time overlap", 
                         carerId, bookingId);
             }
         }
+        
+        log.debug("Checked {} available shifts for carer {} to resolve time conflicts with booking {} - {} conflicts resolved", 
+                 carerAvailableShifts.size(), carerId, bookedBooking.getBookingId(), conflictsResolved);
+        
+        return conflictsResolved;
     }
 
     /**
