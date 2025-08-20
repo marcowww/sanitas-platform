@@ -2,6 +2,7 @@ package com.healthcare.staffing.carer.controller;
 
 import com.healthcare.staffing.carer.domain.Carer;
 import com.healthcare.staffing.carer.domain.CarerAvailability;
+import com.healthcare.staffing.carer.domain.CarerAvailabilityBlock;
 import com.healthcare.staffing.carer.service.CarerService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -86,6 +87,27 @@ public class CarerController {
         return ResponseEntity.ok(availability);
     }
 
+    @PutMapping("/{carerId}/availability/block")
+    public ResponseEntity<Void> blockAvailability(@PathVariable UUID carerId,
+                                                 @Valid @RequestBody BlockAvailabilityRequest request) {
+        carerService.blockAvailability(carerId, request.getStartTime(), request.getEndTime(),
+                                     request.getBookingId(), request.getBlockedBy());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{carerId}/availability/unblock")
+    public ResponseEntity<Void> unblockAvailability(@PathVariable UUID carerId,
+                                                   @Valid @RequestBody UnblockAvailabilityRequest request) {
+        carerService.unblockAvailability(carerId, request.getBookingId(), request.getUnblockedBy());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{carerId}/availability/blocks")
+    public ResponseEntity<List<CarerAvailabilityBlock>> getCarerAvailabilityBlocks(@PathVariable UUID carerId) {
+        List<CarerAvailabilityBlock> blocks = carerService.getCarerAvailabilityBlocks(carerId);
+        return ResponseEntity.ok(blocks);
+    }
+
     // Request DTOs
     public static class CreateCarerRequest {
         private String firstName;
@@ -145,5 +167,35 @@ public class CarerController {
         public void setAvailabilitySlots(List<CarerService.AvailabilitySlotDto> availabilitySlots) { 
             this.availabilitySlots = availabilitySlots; 
         }
+    }
+
+    public static class BlockAvailabilityRequest {
+        private UUID bookingId;
+        private LocalDateTime startTime;
+        private LocalDateTime endTime;
+        private String blockedBy;
+
+        public UUID getBookingId() { return bookingId; }
+        public void setBookingId(UUID bookingId) { this.bookingId = bookingId; }
+
+        public LocalDateTime getStartTime() { return startTime; }
+        public void setStartTime(LocalDateTime startTime) { this.startTime = startTime; }
+
+        public LocalDateTime getEndTime() { return endTime; }
+        public void setEndTime(LocalDateTime endTime) { this.endTime = endTime; }
+
+        public String getBlockedBy() { return blockedBy; }
+        public void setBlockedBy(String blockedBy) { this.blockedBy = blockedBy; }
+    }
+
+    public static class UnblockAvailabilityRequest {
+        private UUID bookingId;
+        private String unblockedBy;
+
+        public UUID getBookingId() { return bookingId; }
+        public void setBookingId(UUID bookingId) { this.bookingId = bookingId; }
+
+        public String getUnblockedBy() { return unblockedBy; }
+        public void setUnblockedBy(String unblockedBy) { this.unblockedBy = unblockedBy; }
     }
 }

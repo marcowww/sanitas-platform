@@ -184,6 +184,7 @@ start_service "booking-service" 8001
 start_service "carer-service" 8002
 start_service "view-maintenance-service" 8003
 start_service "read-api-service" 8004
+start_service "booking-orchestration-service" 8005
 
 # Step 6: Wait for services to be ready
 echo -e "\n${BLUE}Step 6: Waiting for services to be ready...${NC}"
@@ -194,6 +195,7 @@ wait_for_service "http://localhost:8001/actuator/health" "Booking Service"
 wait_for_service "http://localhost:8002/actuator/health" "Carer Service"
 wait_for_service "http://localhost:8003/actuator/health" "View Maintenance Service"
 wait_for_service "http://localhost:8004/actuator/health" "Read API Service"
+wait_for_service "http://localhost:8005/actuator/health" "Booking Orchestration Service"
 
 # Step 7: Display status
 echo -e "\n${GREEN}🎉 Healthcare Staffing CQRS Platform is running!${NC}"
@@ -202,6 +204,7 @@ echo -e "  📝 Booking Service:         http://localhost:8001"
 echo -e "  👥 Carer Service:          http://localhost:8002"
 echo -e "  ⚙️  View Maintenance:       http://localhost:8003"
 echo -e "  📖 Read API:               http://localhost:8004"
+echo -e "  🔀 Booking Orchestration:  http://localhost:8005"
 echo -e "\n${BLUE}Development Tools:${NC}"
 echo -e "  📊 Kafka UI:               http://localhost:9080"
 echo -e "  🔴 Redis Commander:        http://localhost:9081"
@@ -210,14 +213,17 @@ echo -e "  curl http://localhost:8001/actuator/health"
 echo -e "  curl http://localhost:8002/actuator/health"
 echo -e "  curl http://localhost:8003/actuator/health"
 echo -e "  curl http://localhost:8004/actuator/health"
+echo -e "  curl http://localhost:8005/actuator/health"
 
 echo -e "\n${BLUE}Example API Calls:${NC}"
 echo -e "  # Create a carer"
 echo -e "  curl -X POST http://localhost:8002/api/carers \\"
 echo -e "    -H 'Content-Type: application/json' \\"
 echo -e "    -d '{\"firstName\":\"John\",\"lastName\":\"Doe\",\"email\":\"john@example.com\",\"phone\":\"+44123456789\",\"location\":\"London\",\"grade\":\"RN\",\"qualifications\":[\"BLS\"],\"visaStatus\":\"CITIZEN\",\"maxTravelDistance\":50}'"
-echo -e "\n  # Get eligible shifts for a carer"
-echo -e "  curl http://localhost:8004/api/read/carer/{carerId}/eligible-shifts"
+echo -e "\n  # Assign carer to booking via orchestration"
+echo -e "  curl -X POST http://localhost:8005/api/booking-orchestration/assign-carer \\"
+echo -e "    -H 'Content-Type: application/json' \\"
+echo -e "    -d '{\"bookingId\":\"<booking-id>\",\"carerId\":\"<carer-id>\",\"bookedBy\":\"admin\",\"startTime\":\"2023-12-01T09:00:00\",\"endTime\":\"2023-12-01T17:00:00\"}'"
 
 echo -e "\n${YELLOW}📋 To stop all services, run: ./stop.sh${NC}"
 echo -e "${YELLOW}📋 To view logs: tail -f logs/{service-name}.log${NC}"

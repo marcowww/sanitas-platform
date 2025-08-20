@@ -56,8 +56,12 @@ public class EligibilityRulesEngine {
             return 0.0;
         }
         
-        // Mock distance calculation based on location names
-        return Math.random() * 50; // Random distance between 0-50km for demo
+        // Deterministic mock distance calculation based on location names
+        // Use hash codes to generate consistent distances for same location pairs
+        int hash1 = location1.hashCode();
+        int hash2 = location2.hashCode();
+        int combinedHash = Math.abs(hash1 ^ hash2);
+        return (combinedHash % 1000) / 10.0; // Distance between 0-100 miles, deterministic
     }
     
     /**
@@ -89,12 +93,34 @@ public class EligibilityRulesEngine {
     
     /**
      * Checks if carer is available during the specified time period
+     * 
+     * CQRS Note: This is used during event processing for initial eligibility determination.
+     * It should NOT query read projections as that would violate CQRS principles.
+     * Real-time availability checking should happen in the read-api-service.
      */
     private boolean isCarerAvailable(UUID carerId, java.time.LocalDateTime startTime, 
                                    java.time.LocalDateTime endTime) {
-    // Availability check should only fail if carer is already booked for this time slot.
-    // TODO: Integrate with actual booking records to check for conflicts.
-    return true;
+        
+        // For CQRS compliance, this method should only check:
+        // 1. Carer's declared availability schedule (from CarerAvailabilityChanged events)
+        // 2. Basic business rules (e.g., no shifts longer than 12 hours)
+        // 3. Time-based constraints (e.g., no night shifts for certain grades)
+        
+        // It should NOT check for booking conflicts - those are resolved by:
+        // - BookingEventHandler during event processing (eventual consistency)
+        // - Read-API service for real-time queries
+        // - Booking service for write-side validation
+        
+        // For now, basic availability checking:
+        java.time.Duration shiftDuration = java.time.Duration.between(startTime, endTime);
+        if (shiftDuration.toHours() > 12) {
+            return false; // No shifts longer than 12 hours
+        }
+        
+        // Additional carer-specific availability rules could be added here
+        // based on carer preferences/constraints stored in the carer aggregate
+        
+        return true; // Basic eligibility passed
     }
     
     // Supporting classes for projections

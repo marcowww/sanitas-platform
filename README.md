@@ -57,6 +57,19 @@ This project implements a strict CQRS pattern with complete separation between r
   - `GET /api/read/shift/{id}/eligible-carers` - Get eligible carers for shift
   - Filtering and sorting capabilities
 
+### 6. **booking-orchestration-service** (Orchestration Layer)
+- **Port:** 8005
+- **Purpose:** Coordinate complex booking operations across services
+- **Pattern:** Synchronous orchestration with compensation-based rollback
+- **APIs:**
+  - `POST /api/booking-orchestration/assign-carer` - Assign carer to booking with two-phase operation
+  - `POST /api/booking-orchestration/remove-carer` - Remove carer from booking with rollback
+- **Features:**
+  - Circuit breakers for service resilience
+  - Automatic rollback on failure
+  - Carer availability blocking
+  - End-to-end booking coordination
+
 ## 🔧 Technology Stack
 
 - **Java 17+**
@@ -109,6 +122,9 @@ docker-compose ps
 
 # Terminal 4 - Read API Service
 ./gradlew :read-api-service:bootRun
+
+# Terminal 5 - Booking Orchestration Service
+./gradlew :booking-orchestration-service:bootRun
 ```
 
 ### 4. Verify Deployment
@@ -119,6 +135,7 @@ curl http://localhost:8001/actuator/health  # Booking Service
 curl http://localhost:8002/actuator/health  # Carer Service
 curl http://localhost:8003/actuator/health  # View Maintenance
 curl http://localhost:8004/actuator/health  # Read API
+curl http://localhost:8005/actuator/health  # Booking Orchestration
 ```
 
 ## 📋 Usage Examples
@@ -172,6 +189,31 @@ curl http://localhost:8004/api/read/shift/{shiftId}/eligible-carers
 curl "http://localhost:8004/api/read/carer/{carerId}/eligible-shifts?maxDistance=25&sortByDistance=true"
 ```
 
+### Assign Carer to Booking (Orchestration)
+
+```bash
+# Assign carer to booking with orchestration
+curl -X POST http://localhost:8005/api/booking-orchestration/assign-carer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bookingId": "9a103b9a-874f-495c-8999-66e9e35758c5",
+    "carerId": "54a86261-e8b2-4e87-80cf-4d845f117af6",
+    "bookedBy": "Healthcare Admin",
+    "startTime": "2025-08-25T09:00:00",
+    "endTime": "2025-08-25T17:00:00"
+  }'
+
+# Remove carer from booking
+curl -X POST http://localhost:8005/api/booking-orchestration/remove-carer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bookingId": "9a103b9a-874f-495c-8999-66e9e35758c5",
+    "carerId": "54a86261-e8b2-4e87-80cf-4d845f117af6",
+    "pulloutReason": "Emergency unavailable",
+    "pulloutBy": "Healthcare Admin"
+  }'
+```
+
 ## 🔧 Configuration
 
 ### Environment Variables
@@ -197,6 +239,7 @@ REDIS_PORT=6379
 | carer-service | 8002 | Carer write operations |
 | view-maintenance-service | 8003 | Event processing |
 | read-api-service | 8004 | Read operations |
+| booking-orchestration-service | 8005 | Booking coordination |
 | Kafka | 9092 | Event streaming |
 | Kafka UI | 9080 | Development UI |
 | Redis | 6379 | Read projections |
@@ -252,6 +295,36 @@ The system applies these deterministic rules for carer-shift matching:
 5. Client Query → Read API Service → Redis
 ```
 
+## 🎯 Orchestration Pattern
+
+The booking orchestration service implements a **synchronous orchestration pattern** for complex booking operations:
+
+### Two-Phase Booking Assignment
+
+```
+1. Phase 1: Block Carer Availability
+   - POST to carer-service /availability/block
+   - Circuit breaker protection
+   - Automatic retry on transient failures
+
+2. Phase 2: Assign Booking
+   - POST to booking-service /book
+   - Updates booking status to BOOKED
+   - Links carer to booking
+
+3. Rollback on Failure:
+   - If Phase 2 fails → Unblock carer availability
+   - If Phase 1 fails → Return error immediately
+   - Compensation-based transaction management
+```
+
+### Benefits
+
+- **Consistency**: Ensures carer availability and booking assignment are synchronized
+- **Resilience**: Circuit breakers prevent cascading failures
+- **Rollback**: Automatic compensation on partial failures
+- **Simplicity**: Synchronous calls are easier to reason about than event choreography
+
 ## 📈 Scalability Considerations
 
 - **Horizontal Scaling**: All services are stateless
@@ -288,4 +361,4 @@ This project is licensed under the MIT License.
 
 ---
 
-**Built with ❤️ for scalable healthcare staffing solutions**
+**Built with ❤️ for scalable healthcare staffing solutions with CQRS architecture and sophisticated booking orchestration**

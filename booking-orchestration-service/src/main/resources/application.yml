@@ -1,0 +1,79 @@
+server:
+  port: 8005
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: booking-orchestration-service
+  
+  main:
+    banner-mode: console
+
+# Service endpoints
+services:
+  booking-service:
+    base-url: http://localhost:8001
+    timeout: 5000
+  carer-service:
+    base-url: http://localhost:8002
+    timeout: 5000
+
+# Circuit Breaker Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      booking-service:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        permittedNumberOfCallsInHalfOpenState: 3
+        slidingWindowType: COUNT_BASED
+        minimumNumberOfCalls: 5
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+      carer-service:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        permittedNumberOfCallsInHalfOpenState: 3
+        slidingWindowType: COUNT_BASED
+        minimumNumberOfCalls: 5
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+  
+  retry:
+    instances:
+      booking-service:
+        maxAttempts: 3
+        waitDuration: 1000ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+      carer-service:
+        maxAttempts: 3
+        waitDuration: 1000ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+
+# Management and monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Logging
+logging:
+  level:
+    com.healthcare.staffing.orchestration: DEBUG
+    io.github.resilience4j: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

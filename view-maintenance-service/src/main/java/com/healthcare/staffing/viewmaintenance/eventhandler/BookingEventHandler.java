@@ -104,23 +104,45 @@ public class BookingEventHandler {
     }
 
     private void handleBookingBooked(BookingBooked event) {
-        // When a booking is booked, remove it from all carer availability lists
-        // except the assigned carer (who might still see it as "booked")
+        // Get the booking details to check time overlap
+        EligibilityRulesEngine.BookingProjection bookedBooking = 
+            viewProjectionService.getBookingData(event.getBookingId());
+        
+        if (bookedBooking == null) {
+            log.warn("Booking data not found for booked booking: {}", event.getBookingId());
+            return;
+        }
+        
+        // 1. Remove this booking from all carer availability lists except the assigned carer
         removeBookingFromCarerProjectionsExcept(event.getBookingId(), event.getCarerId());
         
-        // Update the booking status in the eligibility list to show it's no longer available
+        // 2. Update the booking status to show it's no longer available
         updateBookingStatusInProjections(event.getBookingId(), "BOOKED");
+        
+        // 3. CRITICAL: Remove the assigned carer from all OTHER bookings that overlap in time
+        removeCarerFromConflictingBookings(event.getCarerId(), bookedBooking);
+        
+        log.info("Processed booking assignment and resolved time conflicts for carer: {} in booking: {}", 
+                event.getCarerId(), event.getBookingId());
     }
 
     private void handleBookingPullout(BookingPullout event) {
         // When a carer pulls out, the booking becomes available again
-        // Recalculate eligibility for all carers
+        // AND the carer becomes available for other bookings that were previously conflicting
+        
         EligibilityRulesEngine.BookingProjection bookingProjection = 
             viewProjectionService.getBookingData(event.getBookingId());
         
         if (bookingProjection != null) {
+            // 1. Make the booking available again for all eligible carers
             updateEligibilityProjectionsForNewBooking(event.getBookingId(), bookingProjection);
             updateBookingStatusInProjections(event.getBookingId(), "OPEN");
+            
+            // 2. CRITICAL: Restore the carer's eligibility for other bookings that were previously conflicting
+            restoreCarerEligibilityAfterPullout(event.getCarerId(), bookingProjection);
+            
+            log.info("Processed carer pullout and restored eligibility for carer: {} from booking: {}", 
+                    event.getCarerId(), event.getBookingId());
         }
     }
 
@@ -253,6 +275,139 @@ public class BookingEventHandler {
         if (availableShifts.stream().noneMatch(s -> s.getBookingId().equals(booking.getBookingId()))) {
             availableShifts.add(shiftDto);
             viewProjectionService.updateAvailableShiftsForCarer(carerId, availableShifts);
+        }
+    }
+
+    /**
+     * Removes a carer from all bookings that have time conflicts with the newly assigned booking
+     */
+    private void removeCarerFromConflictingBookings(UUID carerId, EligibilityRulesEngine.BookingProjection bookedBooking) {
+        // Get all booking IDs
+        Set<String> allBookingIds = viewProjectionService.getAllBookingIds();
+        
+        for (String bookingIdStr : allBookingIds) {
+            UUID bookingId = UUID.fromString(bookingIdStr);
+            
+            // Skip the booking that was just assigned
+            if (bookingId.equals(bookedBooking.getBookingId())) {
+                continue;
+            }
+            
+            // Get booking details to check for time overlap
+            EligibilityRulesEngine.BookingProjection otherBooking = 
+                viewProjectionService.getBookingData(bookingId);
+            
+            if (otherBooking != null && hasTimeOverlap(bookedBooking, otherBooking)) {
+                // Remove this carer from the conflicting booking's eligible carers list
+                removeCarerFromBookingEligibility(carerId, bookingId);
+                
+                // Remove the conflicting booking from this carer's available shifts
+                removeBookingFromCarerAvailableShifts(carerId, bookingId);
+                
+                log.info("Removed carer {} from conflicting booking {} due to time overlap", 
+                        carerId, bookingId);
+            }
+        }
+    }
+
+    /**
+     * Checks if two bookings have overlapping time periods
+     */
+    private boolean hasTimeOverlap(EligibilityRulesEngine.BookingProjection booking1, 
+                                  EligibilityRulesEngine.BookingProjection booking2) {
+        java.time.LocalDateTime start1 = booking1.getStartTime();
+        java.time.LocalDateTime end1 = booking1.getEndTime();
+        java.time.LocalDateTime start2 = booking2.getStartTime();
+        java.time.LocalDateTime end2 = booking2.getEndTime();
+        
+        // Check for overlap: booking1 starts before booking2 ends AND booking2 starts before booking1 ends
+        return start1.isBefore(end2) && start2.isBefore(end1);
+    }
+
+    /**
+     * Removes a specific carer from a booking's eligible carers list
+     */
+    private void removeCarerFromBookingEligibility(UUID carerId, UUID bookingId) {
+        List<EligibleCarerDto> eligibleCarers = 
+            viewProjectionService.getEligibleCarersForShift(bookingId);
+        
+        eligibleCarers.removeIf(carer -> carer.getCarerId().equals(carerId));
+        viewProjectionService.updateEligibleCarersForShift(bookingId, eligibleCarers);
+    }
+
+    /**
+     * Removes a specific booking from a carer's available shifts list
+     */
+    private void removeBookingFromCarerAvailableShifts(UUID carerId, UUID bookingId) {
+        List<EligibleShiftDto> availableShifts = 
+            viewProjectionService.getAvailableShiftsForCarer(carerId);
+        
+        availableShifts.removeIf(shift -> shift.getBookingId().equals(bookingId));
+        viewProjectionService.updateAvailableShiftsForCarer(carerId, availableShifts);
+    }
+
+    /**
+     * Restores a carer's eligibility for bookings that no longer conflict after a pullout
+     */
+    private void restoreCarerEligibilityAfterPullout(UUID carerId, EligibilityRulesEngine.BookingProjection pulledOutBooking) {
+        // Get carer data
+        EligibilityRulesEngine.CarerProjection carer = viewProjectionService.getCarerData(carerId);
+        if (carer == null) {
+            log.warn("Carer data not found for pullout restoration: {}", carerId);
+            return;
+        }
+        
+        // Check all other bookings to see if the carer is now eligible
+        Set<String> allBookingIds = viewProjectionService.getAllBookingIds();
+        
+        for (String bookingIdStr : allBookingIds) {
+            UUID bookingId = UUID.fromString(bookingIdStr);
+            
+            // Skip the booking they just pulled out from
+            if (bookingId.equals(pulledOutBooking.getBookingId())) {
+                continue;
+            }
+            
+            EligibilityRulesEngine.BookingProjection otherBooking = 
+                viewProjectionService.getBookingData(bookingId);
+            
+            if (otherBooking != null) {
+                // Check if this booking was previously conflicting with the pulled-out booking
+                boolean wasConflicting = hasTimeOverlap(pulledOutBooking, otherBooking);
+                
+                if (wasConflicting && eligibilityRulesEngine.isCarerEligibleForBooking(carer, otherBooking)) {
+                    // Check if the booking is still OPEN (not already assigned to someone else)
+                    List<EligibleCarerDto> currentEligibleCarers = 
+                        viewProjectionService.getEligibleCarersForShift(bookingId);
+                    
+                    // Only restore if the booking is still available and carer isn't already in the list
+                    boolean bookingStillOpen = currentEligibleCarers.stream()
+                        .anyMatch(c -> true); // If there are eligible carers, booking is likely still open
+                    
+                    boolean carerAlreadyEligible = currentEligibleCarers.stream()
+                        .anyMatch(c -> c.getCarerId().equals(carerId));
+                    
+                    if (bookingStillOpen && !carerAlreadyEligible) {
+                        // Add carer back to eligible list
+                        EligibleCarerDto restoredCarer = createEligibleCarerDto(carer, otherBooking);
+                        currentEligibleCarers.add(restoredCarer);
+                        viewProjectionService.updateEligibleCarersForShift(bookingId, currentEligibleCarers);
+                        
+                        // Add booking back to carer's available shifts
+                        List<EligibleShiftDto> carerShifts = 
+                            viewProjectionService.getAvailableShiftsForCarer(carerId);
+                        
+                        EligibleShiftDto restoredShift = createEligibleShiftDto(otherBooking);
+                        if (carerShifts.stream().noneMatch(s -> s.getBookingId().equals(bookingId))) {
+                            carerShifts.add(restoredShift);
+                            viewProjectionService.updateAvailableShiftsForCarer(carerId, carerShifts);
+                        }
+                        
+                        log.info("Restored carer {} eligibility for previously conflicting booking {}", 
+                                carerId, bookingId);
+                    }
+                }
+            }
         }
     }
 

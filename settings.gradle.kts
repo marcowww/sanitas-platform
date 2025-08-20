@@ -5,5 +5,6 @@ include(
     "booking-service", 
     "carer-service",
     "view-maintenance-service",
-    "read-api-service"
+    "read-api-service",
+    "booking-orchestration-service"
 )

@@ -2,7 +2,9 @@ package com.healthcare.staffing.carer.service;
 
 import com.healthcare.staffing.carer.domain.Carer;
 import com.healthcare.staffing.carer.domain.CarerAvailability;
+import com.healthcare.staffing.carer.domain.CarerAvailabilityBlock;
 import com.healthcare.staffing.carer.repository.CarerAvailabilityRepository;
+import com.healthcare.staffing.carer.repository.CarerAvailabilityBlockRepository;
 import com.healthcare.staffing.carer.repository.CarerRepository;
 import com.healthcare.staffing.shared.events.carer.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,10 +13,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -24,6 +28,7 @@ public class CarerService {
     
     private final CarerRepository carerRepository;
     private final CarerAvailabilityRepository availabilityRepository;
+    private final CarerAvailabilityBlockRepository availabilityBlockRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     
     private static final String CARER_EVENTS_TOPIC = "carer-events";
@@ -31,9 +36,11 @@ public class CarerService {
     @Autowired
     public CarerService(CarerRepository carerRepository, 
                        CarerAvailabilityRepository availabilityRepository,
+                       CarerAvailabilityBlockRepository availabilityBlockRepository,
                        KafkaTemplate<String, Object> kafkaTemplate) {
         this.carerRepository = carerRepository;
         this.availabilityRepository = availabilityRepository;
+        this.availabilityBlockRepository = availabilityBlockRepository;
         this.kafkaTemplate = kafkaTemplate;
     }
 
@@ -219,5 +226,47 @@ public class CarerService {
 
         public boolean isAvailable() { return available; }
         public void setAvailable(boolean available) { this.available = available; }
+    }
+
+    // Availability blocking methods for orchestration
+    public void blockAvailability(UUID carerId, LocalDateTime startTime, LocalDateTime endTime, 
+                                  UUID bookingId, String blockedBy) {
+        // Verify carer exists
+        carerRepository.findById(carerId)
+            .orElseThrow(() -> new RuntimeException("Carer not found: " + carerId));
+
+        // Check for overlapping blocks
+        List<CarerAvailabilityBlock> overlapping = availabilityBlockRepository
+            .findOverlappingBlocks(carerId, startTime, endTime);
+        
+        if (!overlapping.isEmpty()) {
+            throw new RuntimeException("Carer has overlapping availability blocks during this time");
+        }
+
+        // Create new block
+        CarerAvailabilityBlock block = new CarerAvailabilityBlock(
+            carerId, bookingId, startTime, endTime, blockedBy);
+        
+        availabilityBlockRepository.save(block);
+    }
+
+    public void unblockAvailability(UUID carerId, UUID bookingId, String unblockedBy) {
+        // Verify carer exists
+        carerRepository.findById(carerId)
+            .orElseThrow(() -> new RuntimeException("Carer not found: " + carerId));
+
+        // Find and remove the block
+        Optional<CarerAvailabilityBlock> blockOpt = availabilityBlockRepository
+            .findByCarerIdAndBookingId(carerId, bookingId);
+        
+        if (blockOpt.isEmpty()) {
+            throw new RuntimeException("No availability block found for carer " + carerId + " and booking " + bookingId);
+        }
+
+        availabilityBlockRepository.delete(blockOpt.get());
+    }
+
+    public List<CarerAvailabilityBlock> getCarerAvailabilityBlocks(UUID carerId) {
+        return availabilityBlockRepository.findByCarerId(carerId);
     }
 }
